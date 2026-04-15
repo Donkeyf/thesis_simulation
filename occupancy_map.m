@@ -1,32 +1,57 @@
-% Create a simple 2D occupancy map
-
-% Define map dimensions (in meters)
+% OCCUPANCY MAP
 mapWidth = 10;
 mapHeight = 10;
-resolution = 10; % cells per meter
+resolution = 5;
 
-% Create the occupancy map
 map = binaryOccupancyMap(mapWidth, mapHeight, resolution);
 
-% Add some obstacles (walls and objects)
-% Rectangular wall along the top
-walls = [0 8; 10 8; 10 9; 0 9; 0 8];
-setOccupancy(map, walls, 1, 'polyline');
+% Obstacles
+[x, y] = meshgrid(4:0.2:6, 4:0.2:6);
+setOccupancy(map, [x(:), y(:)], 1);
 
-% Rectangular obstacle in the center
-obstacle1 = [4 4; 6 4; 6 6; 4 6; 4 4];
-setOccupancy(map, obstacle1, 1, 'polyline');
+[x, y] = meshgrid(1:0.2:2, 1:0.2:2);
+setOccupancy(map, [x(:), y(:)], 1);
 
-% Small obstacle in bottom-left
-setOccupancy(map, [2 2; 3 2; 3 3; 2 3; 2 2], 1, 'polyline');
+[x, y] = meshgrid(0:0.2:10, 8:0.2:9);
+setOccupancy(map, [x(:), y(:)], 1);
 
-% Single-cell obstacles
 setOccupancy(map, [7 2], 1);
 setOccupancy(map, [8 3], 1);
 
-% Display the map
+% Show map
 figure;
 show(map);
-title('Binary Occupancy Map');
-xlabel('X (meters)');
-ylabel('Y (meters)');
+hold on;
+title('UAV with Virtual Camera (Ray Casting)');
+xlabel('X (m)');
+ylabel('Y (m)');
+
+% UAV STATE
+uavPose = [2 2 pi/4];  % [x y theta] (ROW vector is important)
+
+% CAMERA PARAMETERS
+camRange = 4;
+camFOV = pi/3;
+numRays = 50;
+
+angles = linspace(-camFOV/2, camFOV/2, numRays);
+
+% ✅ Vectorized ray casting (clean + fast)
+endPts = rayIntersection(map, uavPose, angles, camRange);
+
+% Compute ranges
+ranges = vecnorm(endPts - uavPose(1:2), 2, 2);
+
+% Plot rays
+for i = 1:size(endPts,1)
+    plot([uavPose(1), endPts(i,1)], ...
+         [uavPose(2), endPts(i,2)], 'r');
+end
+
+% Plot UAV
+plot(uavPose(1), uavPose(2), 'bo', 'MarkerSize', 8, 'LineWidth', 2);
+
+% Heading arrow
+quiver(uavPose(1), uavPose(2), ...
+       cos(uavPose(3)), sin(uavPose(3)), ...
+       0.5, 'b', 'LineWidth', 2);
