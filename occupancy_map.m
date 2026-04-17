@@ -6,17 +6,35 @@ resolution = 5;
 map = binaryOccupancyMap(mapWidth, mapHeight, resolution);
 
 % Obstacles
-[x, y] = meshgrid(4:0.2:6, 4:0.2:6);
+% Circle parameters
+cx = 6;      % center x
+cy = 3;      % center y
+r  = 0.5;      % radius
+
+% Create grid around the circle
+[x, y] = meshgrid(cx-r:0.05:cx+r, cy-r:0.05:cy+r);
+
+% Keep only points inside the circle
+inside = (x - cx).^2 + (y - cy).^2 <= r^2;
+
+% Set occupancy
+setOccupancy(map, [x(inside), y(inside)], 1);
+
+[x, y] = meshgrid(0:0.1:4, 3.5:0.1:4);
 setOccupancy(map, [x(:), y(:)], 1);
 
-[x, y] = meshgrid(1:0.2:2, 1:0.2:2);
+[x, y] = meshgrid(6:0.1:8, 7.5:0.1:8);
 setOccupancy(map, [x(:), y(:)], 1);
 
-[x, y] = meshgrid(0:0.2:10, 8:0.2:9);
+[x, y] = meshgrid(3.5:0.1:4, 6:0.1:10);
 setOccupancy(map, [x(:), y(:)], 1);
 
-setOccupancy(map, [7 2], 1);
-setOccupancy(map, [8 3], 1);
+
+[x, y] = meshgrid(6:0.1:7, 5:0.1:6);
+setOccupancy(map, [x(:), y(:)], 1);
+
+[x, y] = meshgrid(3.5:0.1:4.5, 1:0.1:2);
+setOccupancy(map, [x(:), y(:)], 1);
 
 % Show map
 figure;
@@ -27,10 +45,10 @@ xlabel('X (m)');
 ylabel('Y (m)');
 
 % UAV STATE
-uavPose = [2 2 pi/4];  % [x y theta] (ROW vector is important)
+uavPose = [1 1 pi/4];  % [x y theta] (ROW vector is important)
 
 % CAMERA PARAMETERS
-camRange = 4;
+camRange = 10;
 camFOV = pi/3;
 numRays = 50;
 
