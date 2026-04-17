@@ -67,10 +67,13 @@ numRays = 50;
 
 angles = linspace(-camFOV/2, camFOV/2, numRays);
 
-[edges, nodes] = build_prm(200, camRange, uavPose, camFOV, uavPose(3), map);
-
 % ✅ Vectorized ray casting (clean + fast)
 endPts = rayIntersection(map, uavPose, angles, camRange);
+fovPoly = [uavPose(1:2); endPts; uavPose(1:2)];
+
+[edges, nodes] = build_prm(500, camRange, uavPose, camFOV, uavPose(3), map, fovPoly);
+
+
 
 % Plot only the first and last rays
 idx = [1, size(endPts,1)];
