@@ -61,17 +61,22 @@ ylabel('Y (m)');
 uavPose = [1 1 pi/4];  % [x y theta] (ROW vector is important)
 
 % CAMERA PARAMETERS
-camRange = 15;
+camRange = 20;
 camFOV = pi/3;
-numRays = 50;
+numRays = 20;
 
 angles = linspace(-camFOV/2, camFOV/2, numRays);
 
 % ✅ Vectorized ray casting (clean + fast)
 endPts = rayIntersection(map, uavPose, angles, camRange);
-fovPoly = [uavPose(1:2); endPts; uavPose(1:2)];
+rel = endPts - uavPose(1:2);
+angles = atan2(rel(:,2), rel(:,1));
 
-[edges, nodes] = build_prm(500, camRange, uavPose, camFOV, uavPose(3), map, fovPoly);
+[anglesSorted, idx] = sort(angles);
+endPts = endPts(idx,:);
+fovPoly = [uavPose(1:2); endPts];
+
+[edges, nodes] = build_prm(10 00, camRange, uavPose, camFOV, uavPose(3), map, fovPoly);
 
 
 
@@ -100,3 +105,4 @@ for k = 1:size(edges,1)
     plot([nodes(i,1), nodes(j,1)], ...
          [nodes(i,2), nodes(j,2)], 'g');
 end
+
