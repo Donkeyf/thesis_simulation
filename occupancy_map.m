@@ -29,7 +29,6 @@ setOccupancy(map, [x(:), y(:)], 1);
 [x, y] = meshgrid(3.5:0.1:4, 6:0.1:10);
 setOccupancy(map, [x(:), y(:)], 1);
 
-
 [x, y] = meshgrid(6:0.1:7, 5:0.1:6);
 setOccupancy(map, [x(:), y(:)], 1);
 
@@ -37,6 +36,7 @@ setOccupancy(map, [x(:), y(:)], 1);
 setOccupancy(map, [x(:), y(:)], 1);
 
 occ = occupancyMatrix(map);   % extract grid (0 free, 1 occupied)
+
 
 distOutside = bwdist(occ);
 distInside  = bwdist(~occ);
@@ -59,6 +59,10 @@ ylabel('Y (m)');
 
 % UAV STATE
 uavPose = [1 1 pi/4];  % [x y theta] (ROW vector is important)
+start = [uavPose(1), uavPose(2)];
+
+% TARGET POES
+target = [9, 9];
 
 % CAMERA PARAMETERS
 camRange = 20;
@@ -76,9 +80,30 @@ angles = atan2(rel(:,2), rel(:,1));
 endPts = endPts(idx,:);
 fovPoly = [uavPose(1:2); endPts];
 
-[edges, nodes] = build_prm(10 00, camRange, uavPose, camFOV, uavPose(3), map, fovPoly);
+%%
+% Dijkstras implementation
+% [edges, nodes] = build_prm(500, camRange, uavPose, camFOV, uavPose(3), map, fovPoly, target);
+% s = edges(:,1);
+% t = edges(:,2);
+% weights = vecnorm(nodes(s,:) - nodes(t,:), 2, 2);
+% G = graph(s, t, weights);
+% 
+% startIdx = 1;
+% goalIdx  = size(nodes,1);
+% nodes(goalIdx)
+% 
+% [pathIdx, pathCost] = shortestpath(G, startIdx, goalIdx);
+% path = nodes(pathIdx, :);
+%%
 
+% A* implementation
+planner = plannerAStarGrid(map);
 
+startGrid = world2grid(map, start);
+targetGrid = world2grid(map, target);
+
+pathGrid = plan(planner, startGrid, targetGrid);
+path = grid2world(map, pathGrid);
 
 % Plot only the first and last rays
 idx = [1, size(endPts,1)];
@@ -97,12 +122,14 @@ quiver(uavPose(1), uavPose(2), ...
        0.5, 'b', 'LineWidth', 2);
 
 % Plot nodes
-plot(nodes(:,1), nodes(:,2), 'b.');
+% plot(nodes(:,1), nodes(:,2), 'b.');
+% 
+% % Plot edges
+% for k = 1:size(edges,1)
+%     i = edges(k,1); j = edges(k,2);
+%     plot([nodes(i,1), nodes(j,1)], ...
+%          [nodes(i,2), nodes(j,2)], 'g');
+% end
 
-% Plot edges
-for k = 1:size(edges,1)
-    i = edges(k,1); j = edges(k,2);
-    plot([nodes(i,1), nodes(j,1)], ...
-         [nodes(i,2), nodes(j,2)], 'g');
-end
-
+plot(target(1), target(2), 'ro');
+plot(path(:,1), path(:,2), 'r', 'LineWidth', 2);

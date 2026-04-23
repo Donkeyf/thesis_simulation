@@ -1,4 +1,4 @@
-function [edges, nodes] = build_prm(no_sample, range, uavPose, fovAngle, theta0, map, fovPoly)
+function [edges, nodes] = build_prm(no_sample, range, uavPose, fovAngle, theta0, map, fovPoly, target)
     
     r =  range * sqrt(rand(no_sample,1));
     theta = (theta0 - fovAngle/2) + rand(no_sample,1)*fovAngle;
@@ -10,12 +10,16 @@ function [edges, nodes] = build_prm(no_sample, range, uavPose, fovAngle, theta0,
 
     isFree = getOccupancy(map, nodes) < 0.5;
     nodes = nodes(isFree, :);
+    
 
     [in, ~] = inpolygon(nodes(:,1), nodes(:,2), ...
                     fovPoly(:,1), fovPoly(:,2));
     nodes = nodes(in,:);
+    
+    nodes = [nodes; target];
+    nodes = [uavPose(1:2); nodes];
 
-    connectionDist = 1.5;
+    connectionDist = 3;
     edges = [];
     
     for i = 1:size(nodes,1)
@@ -33,5 +37,5 @@ function [edges, nodes] = build_prm(no_sample, range, uavPose, fovAngle, theta0,
             end
         end
     end
-    
-end
+
+
