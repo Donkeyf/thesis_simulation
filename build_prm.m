@@ -1,5 +1,6 @@
-function [edges, nodes] = build_prm(no_sample, range, uavPose, fovAngle, theta0, map, fovPoly, target)
+function [edges, nodes] = build_prm(no_sample, uavPose, fovAngle, theta0, target, endPts)
     
+    range = norm(target - uavPose(1,1:2));
     r =  range * sqrt(rand(no_sample,1));
     theta = (theta0 - fovAngle/2) + rand(no_sample,1)*fovAngle;
 
@@ -7,18 +8,11 @@ function [edges, nodes] = build_prm(no_sample, range, uavPose, fovAngle, theta0,
     y = uavPose(2) + r .* sin(theta);
 
     nodes = [x y];
-
-    isFree = getOccupancy(map, nodes) < 0.5;
-    nodes = nodes(isFree, :);
-
-    [in, ~] = inpolygon(nodes(:,1), nodes(:,2), ...
-                    fovPoly(:,1), fovPoly(:,2));
-    nodes = nodes(in,:);
     
     nodes = [nodes; target];
     nodes = [uavPose(1:2); nodes];
 
-    connectionDist = 3;
+    connectionDist = 2;
     edges = [];
     
     for i = 1:size(nodes,1)
@@ -27,34 +21,31 @@ function [edges, nodes] = build_prm(no_sample, range, uavPose, fovAngle, theta0,
             
             if d < connectionDist
                 % Check collision along edge
-                pts = [linspace(nodes(i,1), nodes(j,1), 10)', ...
-                       linspace(nodes(i,2), nodes(j,2), 10)'];
-                
-                if all(getOccupancy(map, pts) < 0.5)
+                if ~collision_check(endPts, nodes(i,:), nodes(j,:))
                     edges = [edges; i j];
                 end
             end
         end
     end
+end
 
-    
-    % Find index of the (last) target node. After previous code:
-    % nodes = [uavPose(1:2); ... ; target];
-    % So target is the last node
-    targetIdx = size(nodes,1);
-    
-    % For each node (except target), if direct line to target is collision-free, add edge
-    for i = 1:targetIdx-1
-        % Skip if already connected
-        if any( (edges(:,1)==i & edges(:,2)==targetIdx) | (edges(:,1)==targetIdx & edges(:,2)==i) )
+function isCollision = collision_check(endPts, a, b)
+    for k = 1:size(endPts, 1) - 1
+        c = endPts(k,:);
+        d = endPts(k + 1,:);
+
+        if norm(c - d) > 1
             continue
         end
         
-        % Sample points along straight line from node i to target
-        pts = [linspace(nodes(i,1), nodes(targetIdx,1), 20)', ...
-               linspace(nodes(i,2), nodes(targetIdx,2), 20)'];
-        % Check occupancy
-        if all(getOccupancy(map, pts) < 0.5)
-            edges = [edges; i targetIdx];
+        isCollision = ccw(a, c, d) ~= ccw(b, c, d) & ccw(a, b, c) ~= ccw(a, b, d);
+        if isCollision
+            return
         end
     end
+    return
+end
+
+function find_ccw = ccw(a, b, c)
+    find_ccw = (c(2) - a(2)) * (b(1) - a(1)) > (b(2) - a(2)) * (c(1) - a(1));
+end

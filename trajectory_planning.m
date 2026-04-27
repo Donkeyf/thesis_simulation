@@ -60,7 +60,7 @@ start = [uavPose(1), uavPose(2)];
 target = [9, 9];
 
 % CAMERA PARAMETERS
-camRange = 20;
+camRange = 10;
 camFOV = pi/3;
 numRays = 100;
 
@@ -76,14 +76,14 @@ endPts = endPts(idx,:);
 fovPoly = [uavPose(1:2); endPts];
 
 %% Build PRM
-[edges, nodes] = build_prm(500, camRange, uavPose, camFOV, uavPose(3), map, fovPoly, target);
+[edges, nodes] = build_prm(200, uavPose, camFOV, uavPose(3), target, endPts);
 
-G = graph(edges(:,1), edges(:,2));
-bins = conncomp(G);
-
-disp(bins(1))           % start component
-disp(bins(end))         % goal component
-bins(1) ~= bins(end)
+% G = graph(edges(:,1), edges(:,2));
+% bins = conncomp(G);
+% 
+% disp(bins(1))           % start component
+% disp(bins(end))         % goal component
+% bins(1) ~= bins(end)
 
 path = a_star(edges, nodes, start, target);
 path_nodes = nodes(path, :);
