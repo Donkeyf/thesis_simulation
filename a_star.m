@@ -1,31 +1,3 @@
-% function [open] = a_star(edges, nodes, start, target)
-%     open = [start, 0];
-%     close = [];
-%     curr_node = 1;
-%     g = 0;
-% 
-%     while ~isempty(open)
-%         neighbour_ind_1 = edges(:,1) == curr_node;
-%         neighbour_ind_2 = edges(:,2) == curr_node;
-% 
-%         neighbour = nodes(edges(neighbour_ind_1, 2));
-%         neighbour = [neighbour; nodes(edges(neighbour_ind_2, 1))];
-% 
-%         if ismember(target, neighbour)
-%             open = [open; target];
-%             break
-%         end
-% 
-%         g_temp = g + sqrt((nodes(curr_node, 1) + neighbour(:, 1))^2 + (nodes(curr_node, 2) + neighbour(:, 2))^2);
-%         h = sqrt((target(1) + neighbour(:, 1))^2 + (target(2) + neighbour(:, 2))^2);
-%         f = g_temp + h;
-% 
-% 
-% 
-%     end
-% 
-% end
-
 function path = a_star(edges, nodes, startIdx, goalIdx)
 
 N = size(nodes,1);
@@ -36,22 +8,27 @@ for k = 1:size(edges,1)
     i = edges(k,1);
     j = edges(k,2);
     adj{i} = [adj{i}, j];
-    adj{j} = [adj{j}, i]; % undirected
+    adj{j} = [adj{j}, i];
 end
 
 % Initialize
 openSet = startIdx;
+inOpenSet = false(N,1);
+inOpenSet(startIdx) = true;
+
+closedSet = false(N,1);
+
 cameFrom = zeros(N,1);
 
 gScore = inf(N,1);
 gScore(startIdx) = 0;
 
 fScore = inf(N,1);
-fScore(startIdx) = norm(nodes(startIdx,:) - nodes(goalIdx,:)); % heuristic
+fScore(startIdx) = norm(nodes(startIdx,:) - nodes(goalIdx,:));
 
 while ~isempty(openSet)
 
-    % Get node in openSet with lowest fScore
+    % Get node with lowest fScore
     [~, idx] = min(fScore(openSet));
     current = openSet(idx);
 
@@ -61,11 +38,17 @@ while ~isempty(openSet)
         return;
     end
 
-    % Remove current from openSet
+    % Remove from open set
     openSet(idx) = [];
+    inOpenSet(current) = false;
+    closedSet(current) = true;
 
     % Explore neighbors
     for nb = adj{current}
+
+        if closedSet(nb)
+            continue;
+        end
 
         tentative_g = gScore(current) + norm(nodes(current,:) - nodes(nb,:));
 
@@ -74,17 +57,16 @@ while ~isempty(openSet)
             gScore(nb) = tentative_g;
             fScore(nb) = gScore(nb) + norm(nodes(nb,:) - nodes(goalIdx,:));
 
-            if ~ismember(nb, openSet)
+            if ~inOpenSet(nb)
                 openSet(end+1) = nb;
+                inOpenSet(nb) = true;
             end
         end
     end
 end
 
-% If no path found
 path = [];
 end
-
 
 function path = reconstruct_path(cameFrom, current)
 path = current;

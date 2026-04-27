@@ -75,9 +75,25 @@ angles = atan2(rel(:,2), rel(:,1));
 endPts = endPts(idx,:);
 fovPoly = [uavPose(1:2); endPts];
 
-%% Build PRM
-[edges, nodes] = build_prm(200, uavPose, camFOV, uavPose(3), target, endPts);
+%% ESDF
+occ = occupancyMatrix(map);   % returns values in [0,1]
+occ = occ > 0.5;              % convert to logical (important)
 
+D_out = bwdist(occ);      % distance to nearest obstacle
+D_in  = bwdist(~occ);     % distance to nearest free space
+
+ESDF = D_out - D_in;
+
+imagesc(ESDF);
+colorbar;
+axis equal tight;
+title('ESDF (meters)');
+
+%% Build PRM
+
+[edges, nodes] = build_prm(150, uavPose, camFOV, uavPose(3), target, endPts);
+% goal_idx = find(nodes == target)
+% nodes(goal_idx,:)
 % G = graph(edges(:,1), edges(:,2));
 % bins = conncomp(G);
 % 
@@ -85,7 +101,7 @@ fovPoly = [uavPose(1:2); endPts];
 % disp(bins(end))         % goal component
 % bins(1) ~= bins(end)
 
-path = a_star(edges, nodes, start, target);
+path = a_star(edges, nodes, 1, size(nodes, 1));
 path_nodes = nodes(path, :);
 
 %% Plotting
