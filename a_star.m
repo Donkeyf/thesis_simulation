@@ -1,4 +1,12 @@
-function path = a_star(edges, nodes, startIdx, goalIdx)
+function path = a_star(edges, nodes, startIdx, target)
+goalIdx = 1;
+dist = 100;
+for i = 1:size(nodes,1) - 1
+    if norm(nodes(target,:) - nodes(i,:)) < dist
+        dist = norm(nodes(target,:) - nodes(i,:));
+        goalIdx = i;
+    end
+end
 
 N = size(nodes,1);
 

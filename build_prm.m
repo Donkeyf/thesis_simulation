@@ -1,13 +1,21 @@
-function [edges, nodes] = build_prm(no_sample, uavPose, fovAngle, theta0, target, endPts)
-    
+function [edges, nodes] = build_prm(no_sample, uavPose, fovAngle, theta0, target, endPts, fovPoly)
+
     range = norm(target - uavPose(1,1:2));
-    r =  range * sqrt(rand(no_sample,1));
-    theta = (theta0 - fovAngle/2) + rand(no_sample,1)*fovAngle;
+    nodes = [];
+    while size(nodes,1) < no_sample
+        r = range * sqrt(rand);
+        theta = (theta0 - fovAngle/2) + rand*fovAngle;
 
-    x = uavPose(1) + r .* cos(theta);
-    y = uavPose(2) + r .* sin(theta);
+        x = uavPose(1) + r*cos(theta);
+        y = uavPose(2) + r*sin(theta);
 
-    nodes = [x y];
+        % Check if inside FOV polygon
+        in = inpolygon(x, y, fovPoly(:,1), fovPoly(:,2));
+
+        if in
+            nodes = [nodes; x y];
+        end
+    end
     
     nodes = [nodes; target];
     nodes = [uavPose(1:2); nodes];

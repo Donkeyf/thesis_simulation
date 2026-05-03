@@ -91,7 +91,7 @@ title('ESDF (meters)');
 
 %% Build PRM
 
-[edges, nodes] = build_prm(150, uavPose, camFOV, uavPose(3), target, endPts);
+[edges, nodes] = build_prm(40, uavPose, camFOV, uavPose(3), target, endPts, fovPoly);
 % goal_idx = find(nodes == target)
 % nodes(goal_idx,:)
 % G = graph(edges(:,1), edges(:,2));
@@ -103,6 +103,23 @@ title('ESDF (meters)');
 
 path = a_star(edges, nodes, 1, size(nodes, 1));
 path_nodes = nodes(path, :);
+
+[cp, fval] = bspline_opt(path_nodes, 3, ESDF, 4);
+
+%% create spline
+n = size(cp,1);   % number of control points
+p = 3;           % cubic B-spline
+
+% number of knots
+m = n + p + 1;
+
+% uniform internal knots
+knots = linspace(0, 1, m - 2*p);
+
+% clamp ends
+knots = [zeros(1,p), knots, ones(1,p)];
+
+sp = spmak(knots, cp');
 
 %% Plotting
 figure;
@@ -154,3 +171,14 @@ plot(poly(:,1), poly(:,2), 'r-', 'LineWidth', 1.5);
 
 % Optionally, mark the end points
 plot(endPts(:,1), endPts(:,2), 'rx', 'MarkerSize', 6, 'LineWidth', 1.2);
+
+figure(4)
+show(map);
+hold on;
+title('UAV with Virtual Camera (Ray Casting)');
+xlabel('X (m)');
+ylabel('Y (m)');
+fnplt(sp);
+% Plot path
+% plot(path_nodes(:,1), path_nodes(:,2), '-o', 'LineWidth', 2);
+% plot(cp(:,1), cp(:,2), '-o', 'LineWidth', 2);
