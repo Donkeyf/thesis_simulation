@@ -50,6 +50,9 @@ setOccupancy(map, [x(:), y(:)], 1);
 [x, y] = meshgrid(4:0.1:5, 1:0.1:2);
 setOccupancy(map, [x(:), y(:)], 1);
 
+figure;
+show(map);
+
 %% UAV Setting
 
 % UAV STATE
@@ -60,20 +63,13 @@ start = [uavPose(1), uavPose(2)];
 target = [9, 9];
 
 % CAMERA PARAMETERS
-camRange = 10;
-camFOV = pi/3;
+camRange = 15;
+camFOV = pi/2;
 numRays = 100;
 
-angles = linspace(-camFOV/2, camFOV/2, numRays);
+baseAngles = linspace(-camFOV/2, camFOV/2, numRays);
 
-% ✅ Vectorized ray casting (clean + fast)
-endPts = rayIntersection(map, uavPose, angles, camRange);
-rel = endPts - uavPose(1:2);
-angles = atan2(rel(:,2), rel(:,1));
 
-[anglesSorted, idx] = sort(angles);
-endPts = endPts(idx,:);
-fovPoly = [uavPose(1:2); endPts];
 
 %% ESDF
 occ = occupancyMatrix(map);   % returns values in [0,1]
@@ -89,22 +85,81 @@ colorbar;
 axis equal tight;
 title('ESDF (meters)');
 
+
 %% Build PRM
-
-[edges, nodes] = build_prm(40, uavPose, camFOV, uavPose(3), target, endPts, fovPoly);
-% goal_idx = find(nodes == target)
-% nodes(goal_idx,:)
-% G = graph(edges(:,1), edges(:,2));
-% bins = conncomp(G);
+% [edges, nodes] = build_prm(40, uavPose, camFOV, uavPose(3), target, endPts, fovPoly);
+% % goal_idx = find(nodes == target)
+% % nodes(goal_idx,:)
+% % G = graph(edges(:,1), edges(:,2));
+% % bins = conncomp(G);
+% % 
+% % disp(bins(1))           % start component
+% % disp(bins(end))         % goal component
+% % bins(1) ~= bins(end)
 % 
-% disp(bins(1))           % start component
-% disp(bins(end))         % goal component
-% bins(1) ~= bins(end)
+% path = a_star(edges, nodes, 1, size(nodes, 1));
+% path_nodes = nodes(path, :);
+% path_pts(:,:)
+% 
+% [cp, fval] = bspline_opt(path_nodes, 3, ESDF, 4);
 
-path = a_star(edges, nodes, 1, size(nodes, 1));
-path_nodes = nodes(path, :);
+%% loop version
 
-[cp, fval] = bspline_opt(path_nodes, 3, ESDF, 4);
+dt = 0.1;                 % timestep
+v = 1.0;                  % constant speed (m/s)
+goal = target;
+
+trajectory = uavPose(1:2); % store path history
+
+while norm(uavPose(1:2) - goal) > 0.5
+    % ✅ Vectorized ray casting (clean + fast)
+
+    angles = baseAngles + uavPose(3);
+    endPts = rayIntersection(map, uavPose, angles, camRange);
+    rel = endPts - uavPose(1:2);
+    anglesrel = atan2(rel(:,2), rel(:,1));
+
+    [anglesSorted, idx] = sort(anglesrel);
+    endPts = endPts(idx,:);
+    valid = all(isfinite(endPts), 2);
+    endPts = endPts(valid,:);
+    fovPoly = [uavPose(1:2); endPts];
+
+    % 1. Build or update PRM
+    [edges, nodes] = build_prm(50, uavPose, camFOV, ...
+        uavPose(3), target, endPts, fovPoly);
+
+    % 2. Find nearest node to current UAV position
+    d_start = vecnorm(nodes - uavPose(1:2), 2, 2);
+    [~, start_idx] = min(d_start);
+
+    % 3. A* planning
+    goal_idx = size(nodes,1);
+    path = a_star(edges, nodes, start_idx, goal_idx);
+
+    path_nodes = nodes(path, :);
+
+    % 4. If path too short, skip
+    if size(path_nodes,1) < 2
+        warning('No valid path found');
+        break;
+    end
+
+    % 5. Move along first segment of path
+    direction = path_nodes(2,:) - uavPose(1:2);
+    direction = direction / norm(direction);
+    
+    atan2(target(2) - uavPose(2), target(1) - uavPose(1)) * 180/pi
+    uavPose(3) = atan2(target(2) - uavPose(2), target(1) - uavPose(1));
+    uavPose(1:2) = uavPose(1:2) + v * dt * direction
+
+    % 6. Store trajectory
+    trajectory = [trajectory; uavPose(1:2)];
+
+    % 7. Optional: spline smoothing (receding horizon)
+    [cp, fval] = bspline_opt(path_nodes, 3, ESDF, 4);
+
+end
 
 %% create spline
 n = size(cp,1);   % number of control points
