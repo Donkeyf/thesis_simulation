@@ -2,8 +2,8 @@ function [path, fval] = bspline_opt(Q_0, pb, ESDF, delta_t)
     
     v_max = 10;
     a_max = 4;
-    dthr = 0.2;
-    lambdas = [10, 0.8, 0.01];
+    dthr = 0.5;
+    lambdas = [10, 5, 0.01];
 
     Q_1 = Q_0(2:end-1,:);
 

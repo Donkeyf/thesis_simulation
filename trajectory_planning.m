@@ -50,9 +50,6 @@ setOccupancy(map, [x(:), y(:)], 1);
 [x, y] = meshgrid(4:0.1:5, 1:0.1:2);
 setOccupancy(map, [x(:), y(:)], 1);
 
-figure;
-show(map);
-
 %% UAV Setting
 
 % UAV STATE
@@ -65,10 +62,12 @@ target = [9, 9];
 % CAMERA PARAMETERS
 camRange = 15;
 camFOV = pi/2;
-numRays = 100;
-
+numRays = 500;
+% 
 baseAngles = linspace(-camFOV/2, camFOV/2, numRays);
-
+% angles = baseAngles + uavPose(3) - pi/4;
+% endPts = rayIntersection(map, uavPose, angles, camRange);
+% fovPoly = [uavPose(1:2); endPts];
 
 
 %% ESDF
@@ -79,12 +78,6 @@ D_out = bwdist(occ);      % distance to nearest obstacle
 D_in  = bwdist(~occ);     % distance to nearest free space
 
 ESDF = D_out - D_in;
-
-imagesc(ESDF);
-colorbar;
-axis equal tight;
-title('ESDF (meters)');
-
 
 %% Build PRM
 % [edges, nodes] = build_prm(40, uavPose, camFOV, uavPose(3), target, endPts, fovPoly);
@@ -99,7 +92,6 @@ title('ESDF (meters)');
 % 
 % path = a_star(edges, nodes, 1, size(nodes, 1));
 % path_nodes = nodes(path, :);
-% path_pts(:,:)
 % 
 % [cp, fval] = bspline_opt(path_nodes, 3, ESDF, 4);
 
@@ -110,11 +102,12 @@ v = 1.0;                  % constant speed (m/s)
 goal = target;
 
 trajectory = uavPose(1:2); % store path history
+sp_mat = [];
 
-while norm(uavPose(1:2) - goal) > 0.5
+while norm(uavPose(1:2) - goal) > 0.1
     % ✅ Vectorized ray casting (clean + fast)
 
-    angles = baseAngles + uavPose(3);
+    angles = baseAngles + uavPose(3) - pi/4;
     endPts = rayIntersection(map, uavPose, angles, camRange);
     rel = endPts - uavPose(1:2);
     anglesrel = atan2(rel(:,2), rel(:,1));
@@ -124,9 +117,11 @@ while norm(uavPose(1:2) - goal) > 0.5
     valid = all(isfinite(endPts), 2);
     endPts = endPts(valid,:);
     fovPoly = [uavPose(1:2); endPts];
+    area = polyarea(fovPoly(:,1), fovPoly(:,2));
+    no_PRM = floor(sqrt(area) * 10)
 
     % 1. Build or update PRM
-    [edges, nodes] = build_prm(50, uavPose, camFOV, ...
+    [edges, nodes] = build_prm(no_PRM, uavPose, camFOV, ...
         uavPose(3), target, endPts, fovPoly);
 
     % 2. Find nearest node to current UAV position
@@ -145,95 +140,176 @@ while norm(uavPose(1:2) - goal) > 0.5
         break;
     end
 
-    % 5. Move along first segment of path
-    direction = path_nodes(2,:) - uavPose(1:2);
-    direction = direction / norm(direction);
+    % 7. Optional: spline smoothing (receding horizon)
+    [cp, fval] = bspline_opt(path_nodes, 3, ESDF, 4);
+
+    n = size(cp,1);   % number of control points
+    p = 3;           % cubic B-spline
+
+    % number of knots
+    m = n + p + 1;
+
+    % uniform internal knots
+    knots = linspace(0, 1, m - 2*p);
+
+    % clamp ends
+    knots = [zeros(1,p), knots, ones(1,p)];
+
+    sp = spmak(knots, cp');
+    sp_mat = [sp_mat, sp];
     
-    atan2(target(2) - uavPose(2), target(1) - uavPose(1)) * 180/pi
+    uavPose(1:2) = fnval(0.1, sp);
+
+    % 5. Move along first segment of path
     uavPose(3) = atan2(target(2) - uavPose(2), target(1) - uavPose(1));
-    uavPose(1:2) = uavPose(1:2) + v * dt * direction
 
     % 6. Store trajectory
     trajectory = [trajectory; uavPose(1:2)];
 
-    % 7. Optional: spline smoothing (receding horizon)
-    [cp, fval] = bspline_opt(path_nodes, 3, ESDF, 4);
+
 
 end
 
 %% create spline
-n = size(cp,1);   % number of control points
-p = 3;           % cubic B-spline
+% n = size(cp,1);   % number of control points
+% p = 3;           % cubic B-spline
+% 
+% % number of knots
+% m = n + p + 1;
+% 
+% % uniform internal knots
+% knots = linspace(0, 1, m - 2*p);
+% 
+% % clamp ends
+% knots = [zeros(1,p), knots, ones(1,p)];
+% 
+% sp = spmak(knots, cp');
 
-% number of knots
-m = n + p + 1;
+%% Plotting Nice
+figure(1);
+imagesc(ESDF);
+colorbar;
+axis equal tight;
+title('ESDF (meters)');
 
-% uniform internal knots
-knots = linspace(0, 1, m - 2*p);
+figure(2);
+show(map);
+hold on;
+title('UAV Trajectory Planning');
+xlabel('X (m)');
+ylabel('Y (m)');
 
-% clamp ends
-knots = [zeros(1,p), knots, ones(1,p)];
+filename = "trajectory.gif";
 
-sp = spmak(knots, cp');
+h = animatedline('LineWidth', 2, 'Color', 'r');
+
+for i = 1:size(trajectory, 1)
+    addpoints(h, trajectory(i, 1), trajectory(i, 2));
+    drawnow;
+    
+    frame = getframe(gcf);
+    im = frame2im(frame);
+    [A, mapGif] = rgb2ind(im, 256);
+
+    if i == 1
+        imwrite(A, mapGif, filename, 'gif', ...
+            'LoopCount', Inf, 'DelayTime', 0.05);
+    else
+        imwrite(A, mapGif, filename, 'gif', ...
+            'WriteMode', 'append', 'DelayTime', 0.05);
+    end
+
+end
+hold off
+
+%%
+figure(3);
+show(map);
+hold on;
+title('Spline Path');
+xlabel('X (m)');
+ylabel('Y (m)');
+
+filename2 = "splines.gif";
+
+for i = 1:size(trajectory, 1) - 1
+    fnplt(sp_mat(i))
+    drawnow;
+
+    frame = getframe(gcf);
+    im = frame2im(frame);
+    [A, mapGif] = rgb2ind(im, 256);
+
+    if i == 1
+        imwrite(A, mapGif, filename2, 'gif', ...
+            'LoopCount', Inf, 'DelayTime', 0.05);
+    else
+        imwrite(A, mapGif, filename2, 'gif', ...
+            'WriteMode', 'append', 'DelayTime', 0.05);
+    end
+end
+hold off
 
 %% Plotting
-figure;
-show(map);
-hold on;
-title('UAV with Virtual Camera (Ray Casting)');
-xlabel('X (m)');
-ylabel('Y (m)');
-
-% Plot UAV
-plot(uavPose(1), uavPose(2), 'bo', 'MarkerSize', 8, 'LineWidth', 2);
-
-% Heading arrow
-quiver(uavPose(1), uavPose(2), ...
-    cos(uavPose(3)), sin(uavPose(3)), ...
-    0.5, 'b', 'LineWidth', 2);
-
-% Plot only the first and last rays
-idx = [1, size(endPts,1)];
-
-for i = idx
-    plot([uavPose(1), endPts(i,1)], ...
-        [uavPose(2), endPts(i,2)], 'r', 'LineWidth', 2);
-end
-
-% Plot nodes
-plot(nodes(:,1), nodes(:,2), 'b.');
-
-% Plot edges
-for k = 1:size(edges,1)
-    i = edges(k,1); j = edges(k,2);
-    plot([nodes(i,1), nodes(j,1)], ...
-         [nodes(i,2), nodes(j,2)], 'g');
-end
-
-% Plot path
-plot(path_nodes(:,1), path_nodes(:,2), '-o', 'LineWidth', 2);
-
-% Plot visible area polygon (fovPoly) filled with semi-transparent color
-% Ensure polygon is closed
-poly = [fovPoly; fovPoly(1,:)];
-
-% Create patch with transparency
-hPatch = patch('XData', poly(:,1), 'YData', poly(:,2), ...
-    'FaceColor', [1 0.6 0.6], 'EdgeColor', 'none', 'FaceAlpha', 0.25);
-
-% Also plot the FOV boundary for clarity
-plot(poly(:,1), poly(:,2), 'r-', 'LineWidth', 1.5);
-
-% Optionally, mark the end points
-plot(endPts(:,1), endPts(:,2), 'rx', 'MarkerSize', 6, 'LineWidth', 1.2);
-
-figure(4)
-show(map);
-hold on;
-title('UAV with Virtual Camera (Ray Casting)');
-xlabel('X (m)');
-ylabel('Y (m)');
-fnplt(sp);
-% Plot path
+% figure;
+% show(map);
+% hold on;
+% title('UAV with Virtual Camera (Ray Casting)');
+% xlabel('X (m)');
+% ylabel('Y (m)');
+% 
+% % Plot UAV
+% plot(uavPose(1), uavPose(2), 'bo', 'MarkerSize', 8, 'LineWidth', 2);
+% 
+% % Heading arrow
+% quiver(uavPose(1), uavPose(2), ...
+%     cos(uavPose(3)), sin(uavPose(3)), ...
+%     0.5, 'b', 'LineWidth', 2);
+% 
+% % Plot only the first and last rays
+% idx = [1, size(endPts,1)];
+% 
+% for i = idx
+%     plot([uavPose(1), endPts(i,1)], ...
+%         [uavPose(2), endPts(i,2)], 'r', 'LineWidth', 2);
+% end
+% 
+% % Plot nodes
+% plot(nodes(:,1), nodes(:,2), 'b.');
+% 
+% % Plot edges
+% for k = 1:size(edges,1)
+%     i = edges(k,1); j = edges(k,2);
+%     plot([nodes(i,1), nodes(j,1)], ...
+%          [nodes(i,2), nodes(j,2)], 'g');
+% end
+% 
+% % Plot path
+% plot(path_nodes(:,1), path_nodes(:,2), '-o', 'LineWidth', 2);
+% 
+% % Plot visible area polygon (fovPoly) filled with semi-transparent color
+% % Ensure polygon is closed
+% poly = [fovPoly; fovPoly(1,:)];
+% 
+% % Create patch with transparency
+% hPatch = patch('XData', poly(:,1), 'YData', poly(:,2), ...
+%     'FaceColor', [1 0.6 0.6], 'EdgeColor', 'none', 'FaceAlpha', 0.25);
+% 
+% % Also plot the FOV boundary for clarity
+% plot(poly(:,1), poly(:,2), 'r-', 'LineWidth', 1.5);
+% 
+% % Optionally, mark the end points
+% plot(endPts(:,1), endPts(:,2), 'rx', 'MarkerSize', 6, 'LineWidth', 1.2);
+% 
+% figure(4)
+% show(map);
+% hold on;
+% title('UAV with Virtual Camera (Ray Casting)');
+% xlabel('X (m)');
+% ylabel('Y (m)');
+% fnplt(sp);
+% % Plot path
 % plot(path_nodes(:,1), path_nodes(:,2), '-o', 'LineWidth', 2);
 % plot(cp(:,1), cp(:,2), '-o', 'LineWidth', 2);
+% plot(trajectory(:, 1), trajectory(:, 2));
+% 
